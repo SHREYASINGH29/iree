@@ -399,6 +399,10 @@ enumerateMatmulTileMxNxK(linalg::ContractionDimensions cDims,
   return {};
 }
 
+// AutoTuner: This is the place where the first tile selection for CPU takes place.
+static llvm::cl::opt<std::string> InnerTileSize("autotuner-inner-tile-size", llvm::cl::init(""),
+                                  llvm::cl::desc("Inner tile size for autotuner, example 8,8,4"));
+
 static FailureOr<MaterializeEncodingInfo>
 materializeEncodingForTarget(RankedTensorType tensorType,
                              IREE::HAL::ExecutableTargetAttr targetAttr) {
@@ -434,6 +438,16 @@ materializeEncodingForTarget(RankedTensorType tensorType,
   // Map the matmul TileMxNxK to an actual tile shape for the tensor at hand,
   // based on its operand index in the matmul.
   auto rank = tensorType.getRank();
+  // AutoTuner: This is the place where the first tile selection for CPU takes place.
+  if (InnerTileSize != "") {
+    auto tileSizes = llvm::to_vector<3>(llvm::map_range(
+        llvm::split(InnerTileSize, ","), [](StringRef s) -> int64_t {
+          return std::stoi(s.str());
+        }));
+    if (tileSizes.size() == 3) {
+      chosenTileMxNxK = TileMxNxK{tileSizes[0], tileSizes[1], tileSizes[2]};
+    }
+  }
   return getEncodingInfoForMatmul(encoding, rank, chosenTileMxNxK);
 }
 
